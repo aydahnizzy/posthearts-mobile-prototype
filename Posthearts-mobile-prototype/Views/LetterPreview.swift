@@ -9,10 +9,18 @@ struct LetterPreview: View {
     /// When false, gestures are disabled (used for thumbnails).
     var interactive: Bool = true
 
-    /// Internal padding between the frame edge and the paper.
-    private let framePaddingH: CGFloat = 18
-    private let framePaddingV: CGFloat = 22
+    @State private var jiggleStep: Int = -1
+
+    /// Internal padding between the frame edge and the paper, expressed as a
+    /// fraction of the frame's width/height. 12.5% on each axis matches the web's
+    /// `grid-template-columns: 12.5% 75% 12.5%` chrome.
+    private let framePaddingFraction: CGFloat = 0.125
     private let frameCornerRadius: CGFloat = 24
+
+    private let jiggleAngles: [Double] = [-0.5, 1.0, -1.0, 0.5]
+    private var jiggleAngle: Double {
+        jiggleStep >= 0 ? jiggleAngles[jiggleStep % jiggleAngles.count] : 0
+    }
 
     var body: some View {
         GeometryReader { proxy in
@@ -20,8 +28,8 @@ struct LetterPreview: View {
             let frameH = proxy.size.height
 
             // Fit paper inside the frame respecting both axes.
-            let availW = frameW - 2 * framePaddingH
-            let availH = frameH - 2 * framePaddingV
+            let availW = frameW * (1 - 2 * framePaddingFraction)
+            let availH = frameH * (1 - 2 * framePaddingFraction)
             let widthBound = availW / PaperGeometry.aspect <= availH
             let paperW: CGFloat = widthBound ? availW : availH * PaperGeometry.aspect
             let paperH: CGFloat = widthBound ? availW / PaperGeometry.aspect : availH
@@ -33,15 +41,21 @@ struct LetterPreview: View {
                     .fill(letter.frameColor.color)
                     .animation(.easeInOut(duration: 0.3), value: letter.frameColor)
 
-                // Paper texture + text — clipped to the paper's rounded rect.
-                paperBaseLayer(width: paperW, height: paperH, scale: scale)
-
-                // Add-ons — share the paper's coordinate space but are NOT clipped to it,
-                // so they can extend onto the frame background. Only the outer frame
-                // (.clipShape below) constrains them.
-                addOnsLayer(width: paperW, height: paperH, scale: scale)
+                // Paper + add-ons jiggle on frameColor change. The rotation cycles
+                // through [-0.5°, 1°, -1°, 0.5°] — one step per change — so successive
+                // changes alternate between resting tilts.
+                ZStack {
+                    paperBaseLayer(width: paperW, height: paperH, scale: scale)
+                    addOnsLayer(width: paperW, height: paperH, scale: scale)
+                }
+                .rotationEffect(.degrees(jiggleAngle))
+                .animation(.easeInOut(duration: 0.4), value: jiggleStep)
+                .onChange(of: letter.frameColor) { _, _ in
+                    jiggleStep += 1
+                }
             }
             .frame(width: frameW, height: frameH)
+            .compositingGroup()
             .clipShape(RoundedRectangle(cornerRadius: frameCornerRadius))
             .contentShape(RoundedRectangle(cornerRadius: frameCornerRadius))
             .if(interactive) { view in

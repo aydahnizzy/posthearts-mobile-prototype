@@ -10,7 +10,11 @@ struct DatedLetterGroup: Identifiable {
 
 @Observable
 final class LettersStore {
-    var letters: [Letter] = []
+    var letters: [Letter]
+
+    init(seedSamples: Bool = true) {
+        self.letters = seedSamples ? LettersStore.makeSampleLetters() : []
+    }
 
     @discardableResult
     func create() -> Letter {
@@ -64,5 +68,52 @@ final class LettersStore {
             groups.append(.init(id: "year-\(y)", label: "\(y)", order: 4 + (currentYear - y), letters: byYear[y] ?? []))
         }
         return groups
+    }
+
+    // MARK: - Sample data
+
+    private static func makeSampleLetters() -> [Letter] {
+        let now = Date()
+        let cal = Calendar.current
+        func daysAgo(_ n: Int) -> Date {
+            cal.date(byAdding: .day, value: -n, to: now) ?? now
+        }
+
+        let samples: [(content: String, paper: String, font: String, frame: FrameColor, age: Int)] = [
+            (
+                "I just wanted to take a moment to tell you how new pregnant you are. Every time I see you, I can't help but be amazed by your beauty.\n\nBeyond looks, I really like the way you talk. The way you express yourself is something I truly admire.\n\nLooking forward to getting to know you more.\n\nAyomide Daniel",
+                "burnt-paper", "Marck Script", FrameColor.all[10], 0
+            ),
+            (
+                "Coucou mon bébé ❤️\n\nJ'espère que tu passeras une excellente semaine et que tu ne sentes pas trop stressée.\n\nJe serai toujours là pour t'écouter et t'aider du mieux que je peux, ma Shaylana.",
+                "burnt-paper", "Instrument Serif", FrameColor.all[8], 0
+            ),
+            (
+                "Hoping to see you again soon. The garden is in full bloom and reminds me of the afternoon we spent there last spring.",
+                "flowers", "Damion", FrameColor.all[2], 0
+            ),
+            (
+                "She's just a girl. Reminding myself of that every morning.",
+                "pink-stars", "Gloria Hallelujah", FrameColor.all[12], 0
+            ),
+            (
+                "Do you remember that trip when we kept missing the train and ended up walking through that little town at midnight? I think about it more than I should.",
+                "old-flower", "Inria Serif", FrameColor.all[1], 14
+            ),
+            (
+                "miss you luv.\n\nThe coffee at our spot tastes wrong without you. Come back soon.",
+                "kisses", "Mansalva", FrameColor.all[8], 22
+            ),
+        ]
+
+        return samples.map { sample in
+            let l = Letter()
+            l.content = sample.content
+            l.paperId = sample.paper
+            l.fontId = sample.font
+            l.frameColor = sample.frame
+            l.updatedAt = daysAgo(sample.age)
+            return l
+        }
     }
 }

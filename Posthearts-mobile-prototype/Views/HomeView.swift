@@ -2,96 +2,146 @@ import SwiftUI
 
 struct HomeView: View {
     @Bindable var store: LettersStore
-    let onOpen: (Letter) -> Void
+    let namespace: Namespace.ID
+    let transitionVersion: Int
+    let activeLetterId: UUID?
 
     private let columns = [
-        GridItem(.flexible(), spacing: 14),
-        GridItem(.flexible(), spacing: 14),
+        GridItem(.flexible(), spacing: 8),
+        GridItem(.flexible(), spacing: 8),
     ]
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 28) {
-                topBar
-                    .padding(.horizontal, 20)
-                    .padding(.top, 4)
+        ZStack(alignment: .bottom) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 32) {
+                    if store.letters.isEmpty {
+                        emptyState
+                            .frame(maxWidth: .infinity)
+                            .padding(.top, 60)
+                            .padding(.horizontal, 20)
+                    } else {
+                        ForEach(store.grouped) { group in
+                            VStack(alignment: .leading, spacing: 16) {
+                                Text(group.label)
+                                    .font(.system(size: 20, weight: .semibold))
+                                    .foregroundStyle(Theme.Text.default)
 
-                if store.letters.isEmpty {
-                    emptyState
-                        .frame(maxWidth: .infinity)
-                        .padding(.top, 60)
-                        .padding(.horizontal, 20)
-                } else {
-                    ForEach(store.grouped) { group in
-                        VStack(alignment: .leading, spacing: 14) {
-                            Text(group.label)
-                                .font(.system(size: 22, weight: .bold))
-                                .padding(.horizontal, 20)
+                                LazyVGrid(columns: columns, spacing: 16) {
+                                    ForEach(group.letters) { letter in
+                                        ZStack {
+                                            // Decoy thumbnail. Hidden while this letter's editor is active
+                                            // (push → open → dismiss anim) so the user never sees a doubled
+                                            // render mid-transition; revealed instantly the moment the editor
+                                            // disappears, which side-steps iOS 18's source-hide leak bug.
+                                            LetterThumbnail(letter: letter)
+                                                .opacity(activeLetterId == letter.id ? 0 : 1)
+                                                .animation(nil, value: activeLetterId)
+                                                .allowsHitTesting(false)
 
-                            LazyVGrid(columns: columns, spacing: 20) {
-                                ForEach(group.letters) { letter in
-                                    LetterThumbnail(letter: letter) { onOpen(letter) }
+                                            NavigationLink(value: letter) {
+                                                LetterThumbnail(letter: letter)
+                                            }
+                                            .buttonStyle(PressableScaleStyle())
+                                            .matchedTransitionSource(
+                                                id: ZoomID(id: letter.id, version: transitionVersion),
+                                                in: namespace
+                                            )
+                                        }
+                                    }
                                 }
                             }
                             .padding(.horizontal, 20)
                         }
                     }
-                }
 
-                Spacer(minLength: 100)   // breathing room above tab bar
+                    Spacer(minLength: 140)
+                }
+                .padding(.top, 24)
             }
+            .safeAreaInset(edge: .top, spacing: 0) { topBar }
         }
-        .background(Color(.systemBackground))
+        .background(Theme.Background.canvas)
     }
+
+    // MARK: - Top bar
 
     private var topBar: some View {
         HStack {
-            Circle()
-                .fill(LinearGradient(
-                    colors: [Color(h: 320, s: 100, l: 84), Color(h: 241, s: 80, l: 64)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                ))
-                .frame(width: 36, height: 36)
-                .overlay(
-                    Image(systemName: "person.fill")
-                        .foregroundStyle(.white.opacity(0.85))
-                        .font(.system(size: 16))
-                )
+            avatar
             Spacer()
             proPill
         }
+        .padding(.horizontal, 20)
+        .padding(.top, 8)
+        .padding(.bottom, 16)
+        .background(Theme.Background.canvas)
+    }
+
+    private var avatar: some View {
+        Image("avatar")
+            .resizable()
+            .scaledToFill()
+            .frame(width: 40, height: 40)
+            .clipShape(Circle())
     }
 
     private var proPill: some View {
         HStack(spacing: 6) {
-            Image(systemName: "diamond.fill")
-                .font(.system(size: 12, weight: .bold))
+            Image("diamond")
+                .renderingMode(.template)
+                .resizable()
+                .scaledToFit()
+                .frame(width: 16, height: 16)
             Text("Pro")
-                .font(.system(size: 14, weight: .semibold))
+                .font(.system(size: 12, weight: .medium))
+                .tracking(0.1)
         }
-        .foregroundStyle(.white)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
+        .foregroundStyle(Theme.Text.onPrimary)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
         .background(
             LinearGradient(
-                colors: [Color(h: 289, s: 87, l: 63), Color(h: 241, s: 80, l: 64)],
-                startPoint: .leading, endPoint: .trailing
+                colors: [Color(hex: 0xFC4EB7), Color(hex: 0x5C59ED)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
             ),
             in: Capsule()
         )
     }
 
+//    // MARK: - Floating search
+//
+//    private var floatingSearch: some View {
+//        Button {
+//            // search action — wired up later
+//        } label: {
+//            Image("magnifying-glass")
+//                .renderingMode(.template)
+//                .resizable()
+//                .scaledToFit()
+//                .frame(width: 16, height: 16)
+//                .foregroundStyle(Theme.Icon.primary)
+//                .frame(width: 40, height: 28)
+//                .background(Theme.Background.onCanvas, in: Capsule())
+//                .shadow(color: Color(hex: 0x595959, alpha: 0.2), radius: 8, x: 0, y: 0)
+//        }
+//        .buttonStyle(.plain)
+//    }
+
+    // MARK: - Empty state
+
     private var emptyState: some View {
         VStack(spacing: 12) {
             Image(systemName: "envelope.open")
                 .font(.system(size: 44, weight: .light))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Theme.Text.tertiary)
             Text("No letters yet")
                 .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(Theme.Text.default)
             Text("Tap + below to write your first letter.")
                 .font(.system(size: 14))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Theme.Text.secondary)
         }
     }
 }

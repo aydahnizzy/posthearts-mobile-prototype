@@ -4,23 +4,32 @@ struct RootView: View {
     @State private var store = LettersStore()
     @State private var path: [Letter] = []
     @State private var tab: Tab = .home
+    @State private var transitionVersion: Int = 0
+    @State private var activeLetterId: UUID? = nil
+    @Namespace private var letterNamespace
 
     enum Tab { case home, mailbox }
 
     var body: some View {
         NavigationStack(path: $path) {
-            ZStack(alignment: .bottom) {
-                content
-
-                customTabBar
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, 8)
-            }
-            .navigationDestination(for: Letter.self) { letter in
-                EditorView(letter: letter)
-                    .navigationBarBackButtonHidden(false)
-                    .toolbarBackground(.hidden, for: .navigationBar)
-                    .onDisappear { store.touch(letter) }
+            content
+                .safeAreaInset(edge: .bottom, spacing: 0) { bottomNav }
+                .navigationDestination(for: Letter.self) { letter in
+                    EditorView(letter: letter)
+                        .navigationTransition(.zoom(
+                            sourceID: ZoomID(id: letter.id, version: transitionVersion),
+                            in: letterNamespace
+                        ))
+                        .toolbar(.hidden, for: .navigationBar)
+                        .onDisappear {
+                            activeLetterId = nil
+                            transitionVersion &+= 1
+                        }
+                }
+        }
+        .onChange(of: path) { _, newPath in
+            if let letter = newPath.last {
+                activeLetterId = letter.id
             }
         }
     }
@@ -29,90 +38,84 @@ struct RootView: View {
     private var content: some View {
         switch tab {
         case .home:
-            HomeView(store: store) { letter in path.append(letter) }
+            HomeView(
+                store: store,
+                namespace: letterNamespace,
+                transitionVersion: transitionVersion,
+                activeLetterId: activeLetterId
+            )
         case .mailbox:
             MailboxView()
         }
     }
 
-    // MARK: - Custom tab bar
+    // MARK: - Bottom nav
 
-    private var customTabBar: some View {
-        HStack(alignment: .center, spacing: 0) {
-            tabButton(label: "Posthearts", isActive: tab == .home) {
-                postheartsLogo(active: tab == .home)
-            } action: {
-                tab = .home
+    private var bottomNav: some View {
+        HStack(alignment: .bottom, spacing: 8) {
+            navItem(
+                icon: { iconImage("posthearts-logo", size: 28, tint: tab == .home ? Theme.Icon.hover : Theme.Icon.primary) },
+                label: "Posthearts",
+                isActive: tab == .home
+            ) { tab = .home }
+
+            navItem(
+                icon: { iconImage("circle-plus", size: 36, tint: Theme.Icon.primary) },
+                label: "New",
+                isActive: false
+            ) {
+                let letter = store.create()
+                path.append(letter)
             }
 
-            newButton
-
-            tabButton(label: "Mailbox", isActive: tab == .mailbox) {
-                Image(systemName: "tray.fill")
-                    .font(.system(size: 22))
-                    .foregroundStyle(tab == .mailbox ? .primary : .secondary)
-            } action: {
-                tab = .mailbox
-            }
+            navItem(
+                icon: { iconImage("IconMailbox", size: 28, tint: tab == .mailbox ? Theme.Icon.hover : Theme.Icon.primary) },
+                label: "Mailbox",
+                isActive: tab == .mailbox
+            ) { tab = .mailbox }
         }
-        .padding(.vertical, 10)
-        .background(.ultraThickMaterial, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
-        .shadow(color: .black.opacity(0.08), radius: 12, x: 0, y: 4)
+        .padding(.horizontal, 20)
+        .padding(.top, 8)
+        .padding(.bottom, 16)
+        .background(Theme.Background.canvas)
     }
 
-    private func tabButton<Icon: View>(
+    private func navItem<Icon: View>(
+        @ViewBuilder icon: () -> Icon,
         label: String,
         isActive: Bool,
-        @ViewBuilder icon: () -> Icon,
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
             VStack(spacing: 4) {
                 icon()
                 Text(label)
-                    .font(.system(size: 11, weight: isActive ? .semibold : .regular))
-                    .foregroundStyle(isActive ? .primary : .secondary)
+                    .font(.system(size: 12, weight: .medium))
+                    .tracking(0.1)
+                    .foregroundStyle(isActive ? Theme.Text.default : Theme.Text.tertiary)
             }
             .frame(maxWidth: .infinity)
         }
         .buttonStyle(.plain)
     }
 
-    private var newButton: some View {
-        Button {
-            let letter = store.create()
-            path.append(letter)
-        } label: {
-            VStack(spacing: 4) {
-                ZStack {
-                    Circle()
-                        .fill(Color.gray.opacity(0.7))
-                        .frame(width: 44, height: 44)
-                    Image(systemName: "plus")
-                        .font(.system(size: 22, weight: .semibold))
-                        .foregroundStyle(.white)
-                }
-                Text("New")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
-            }
-            .frame(maxWidth: .infinity)
-        }
-        .buttonStyle(.plain)
+    private func iconImage(_ name: String, size: CGFloat, tint: Color) -> some View {
+        Image(name)
+            .renderingMode(.template)
+            .resizable()
+            .scaledToFit()
+            .frame(width: size, height: size)
+            .foregroundStyle(tint)
     }
+}
 
-    private func postheartsLogo(active: Bool) -> some View {
-        // Simple wordmark-style glyph: two circles forming an infinity/heart cue.
-        HStack(spacing: -6) {
-            Circle()
-                .strokeBorder(active ? Color.primary : Color.secondary, lineWidth: 3)
-                .frame(width: 18, height: 18)
-            Circle()
-                .strokeBorder(active ? Color.primary : Color.secondary, lineWidth: 3)
-                .frame(width: 18, height: 18)
-        }
-        .frame(height: 22)
-    }
+/// Composite id for the matched zoom transition. Bumping `version` after each
+/// dismiss makes the next push use a fresh id, working around an iOS 18 bug
+/// where the system's source-hide state leaks across consecutive interactive
+/// dismisses of the same letter.
+struct ZoomID: Hashable {
+    let id: UUID
+    let version: Int
 }
 
 #Preview {
