@@ -6,6 +6,7 @@ struct RootView: View {
     @State private var tab: Tab = .home
     @State private var transitionVersion: Int = 0
     @State private var activeLetterId: UUID? = nil
+    @State private var chromeVisible: Bool = true
     @Namespace private var letterNamespace
 
     enum Tab { case home, mailbox }
@@ -13,7 +14,12 @@ struct RootView: View {
     var body: some View {
         NavigationStack(path: $path) {
             content
-                .safeAreaInset(edge: .bottom, spacing: 0) { bottomNav }
+                .overlay(alignment: .bottom) {
+                    bottomNav
+                        .opacity(chromeVisible ? 1 : 0)
+                        .offset(y: chromeVisible ? 0 : 120)
+                        .animation(.easeInOut(duration: 0.25), value: chromeVisible)
+                }
                 .navigationDestination(for: Letter.self) { letter in
                     EditorView(letter: letter)
                         .navigationTransition(.zoom(
@@ -32,6 +38,8 @@ struct RootView: View {
                 activeLetterId = letter.id
             }
         }
+        .sensoryFeedback(.selection, trigger: tab)
+        .sensoryFeedback(.impact(weight: .light), trigger: path.count)
     }
 
     @ViewBuilder
@@ -42,7 +50,8 @@ struct RootView: View {
                 store: store,
                 namespace: letterNamespace,
                 transitionVersion: transitionVersion,
-                activeLetterId: activeLetterId
+                activeLetterId: activeLetterId,
+                chromeVisible: $chromeVisible
             )
         case .mailbox:
             MailboxView()
@@ -52,60 +61,53 @@ struct RootView: View {
     // MARK: - Bottom nav
 
     private var bottomNav: some View {
-        HStack(alignment: .bottom, spacing: 8) {
-            navItem(
-                icon: { iconImage("posthearts-logo", size: 28, tint: tab == .home ? Theme.Icon.hover : Theme.Icon.primary) },
-                label: "Posthearts",
-                isActive: tab == .home
-            ) { tab = .home }
+        HStack(spacing: 8) {
+            navIconButton(isActive: tab == .home) {
+                Image("IconHomeRoundDoor")
+                    .renderingMode(.template)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 28, height: 28)
+                    .foregroundStyle(tab == .home ? Theme.Icon.hover : Theme.Icon.secondary)
+            } action: { tab = .home }
 
-            navItem(
-                icon: { iconImage("circle-plus", size: 36, tint: Theme.Icon.primary) },
-                label: "New",
-                isActive: false
-            ) {
+            navIconButton(isActive: false) {
+                Image("circle-plus")
+                    .renderingMode(.template)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 36, height: 36)
+                    .foregroundStyle(Theme.Icon.secondary)
+            } action: {
                 let letter = store.create()
                 path.append(letter)
             }
 
-            navItem(
-                icon: { iconImage("IconMailbox", size: 28, tint: tab == .mailbox ? Theme.Icon.hover : Theme.Icon.primary) },
-                label: "Mailbox",
-                isActive: tab == .mailbox
-            ) { tab = .mailbox }
+            navIconButton(isActive: tab == .mailbox) {
+                Image("IconMailbox")
+                    .renderingMode(.template)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 28, height: 28)
+                    .foregroundStyle(tab == .mailbox ? Theme.Icon.hover : Theme.Icon.secondary)
+            } action: { tab = .mailbox }
         }
         .padding(.horizontal, 20)
         .padding(.top, 8)
-        .padding(.bottom, 16)
+        .padding(.bottom, 0)
         .background(Theme.Background.canvas)
     }
 
-    private func navItem<Icon: View>(
-        @ViewBuilder icon: () -> Icon,
-        label: String,
+    private func navIconButton<Content: View>(
         isActive: Bool,
+        @ViewBuilder icon: () -> Content,
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
-            VStack(spacing: 4) {
-                icon()
-                Text(label)
-                    .font(.system(size: 12, weight: .medium))
-                    .tracking(0.1)
-                    .foregroundStyle(isActive ? Theme.Text.default : Theme.Text.tertiary)
-            }
-            .frame(maxWidth: .infinity)
+            icon()
+                .frame(maxWidth: .infinity)
         }
         .buttonStyle(.plain)
-    }
-
-    private func iconImage(_ name: String, size: CGFloat, tint: Color) -> some View {
-        Image(name)
-            .renderingMode(.template)
-            .resizable()
-            .scaledToFit()
-            .frame(width: size, height: size)
-            .foregroundStyle(tint)
     }
 }
 

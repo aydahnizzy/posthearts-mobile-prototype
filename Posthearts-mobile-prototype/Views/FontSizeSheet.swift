@@ -41,6 +41,7 @@ struct FontSizeSheet: View {
                     Button("Done") { dismiss() }
                 }
             }
+            .sensoryFeedback(.selection, trigger: letter.fontSizeStep)
         }
     }
 }

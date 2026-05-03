@@ -9,13 +9,17 @@ struct LetterPreview: View {
     /// When false, gestures are disabled (used for thumbnails).
     var interactive: Bool = true
 
+    /// Outer rounded-rect radius applied to the colored frame. Editors want
+    /// the full 24pt look; small thumbnails should pass a smaller value (e.g.
+    /// 8pt) so the frame doesn't dominate the cell visually.
+    var frameCornerRadius: CGFloat = 24
+
     @State private var jiggleStep: Int = -1
 
     /// Internal padding between the frame edge and the paper, expressed as a
     /// fraction of the frame's width/height. 12.5% on each axis matches the web's
     /// `grid-template-columns: 12.5% 75% 12.5%` chrome.
     private let framePaddingFraction: CGFloat = 0.125
-    private let frameCornerRadius: CGFloat = 24
 
     private let jiggleAngles: [Double] = [-0.5, 1.0, -1.0, 0.5]
     private var jiggleAngle: Double {

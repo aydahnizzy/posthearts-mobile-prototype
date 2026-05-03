@@ -32,8 +32,7 @@ struct AddOnView: View {
 
     var body: some View {
         ZStack {
-            Image(uiImage: UIImage(named: addOn.assetName) ?? UIImage())
-                .resizable()
+            AddOnImage(name: addOn.assetName)
                 .scaledToFit()
                 .frame(width: displayWidth, height: displayHeight)
 
@@ -77,7 +76,10 @@ struct AddOnView: View {
         // Top-center trash chip.
         chip(systemImage: "trash")
             .highPriorityGesture(
-                TapGesture().onEnded { onDelete() }
+                TapGesture().onEnded {
+                    Haptics.impact(.medium)
+                    onDelete()
+                }
             )
             .offset(y: -outerHeight / 2 - chipSize / 2 - chipGap)
 

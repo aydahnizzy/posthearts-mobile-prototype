@@ -44,6 +44,24 @@ final class Letter: Identifiable, Hashable {
         return String(firstLine.prefix(40))
     }
 
+    /// Compact relative time string for the home grid caption: "Now", "5m",
+    /// "2h", "3d", "1w", "2mo", "1y".
+    var timeAgoShort: String {
+        let interval = max(0, Date().timeIntervalSince(updatedAt))
+        if interval < 60 { return "Now" }
+        let minutes = Int(interval / 60)
+        if minutes < 60 { return "\(minutes)m" }
+        let hours = Int(interval / 3600)
+        if hours < 24 { return "\(hours)h" }
+        let days = Int(interval / 86_400)
+        if days < 7 { return "\(days)d" }
+        let weeks = Int(interval / 604_800)
+        if weeks < 4 { return "\(weeks)w" }
+        let months = Int(interval / 2_592_000)
+        if months < 12 { return "\(months)mo" }
+        return "\(Int(interval / 31_536_000))y"
+    }
+
     static func == (lhs: Letter, rhs: Letter) -> Bool { lhs.id == rhs.id }
     func hash(into hasher: inout Hasher) { hasher.combine(id) }
 }

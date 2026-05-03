@@ -50,6 +50,7 @@ enum Theme {
         static let successOnDark  = dynamic(light: 0x5FC381, dark: 0xDAF1E2)
         static let warning        = dynamic(light: 0x865503, dark: 0xFDEED4)
         static let warningOnDark  = dynamic(light: 0xDD900D, dark: 0xFDEED4)
+        static let brand          = dynamic(light: 0x5C59ED, dark: 0x5C59ED)
     }
 
     enum Text {
