@@ -1,7 +1,10 @@
 import SwiftUI
 
-struct FrameColor: Identifiable, Equatable {
-    let id = UUID()
+struct FrameColor: Identifiable, Equatable, Codable {
+    /// Composite id from h/s/l so a decoded color stays equal to the
+    /// canonical instance in `FrameColor.all` (rather than getting a fresh
+    /// UUID that breaks selection-state comparisons in pickers).
+    var id: String { "\(h)-\(s)-\(l)" }
     let h: Double
     let s: Double
     let l: Double

@@ -5,8 +5,8 @@ enum AddOnKind: String, Codable {
     case sticker, emoji, photo
 }
 
-struct AddOn: Identifiable, Equatable {
-    let id = UUID()
+struct AddOn: Identifiable, Equatable, Codable {
+    var id: UUID = UUID()
     let kind: AddOnKind
     /// Asset name in the bundle (without extension).
     let assetName: String

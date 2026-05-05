@@ -90,14 +90,18 @@ struct LetterPreview: View {
         ZStack {
             Color.clear
             ForEach($letter.addOns) { $addOn in
+                // Capture the id by value so the delete closure doesn't go
+                // through the binding (which becomes invalid the instant the
+                // element is removed from the array).
+                let id = addOn.id
                 AddOnView(
                     addOn: $addOn,
                     scale: scale,
-                    isSelected: selectedAddOnId == addOn.id,
+                    isSelected: selectedAddOnId == id,
                     interactive: interactive,
-                    onSelect: { selectedAddOnId = addOn.id },
+                    onSelect: { selectedAddOnId = id },
                     onDelete: {
-                        letter.addOns.removeAll { $0.id == addOn.id }
+                        letter.addOns.removeAll { $0.id == id }
                         selectedAddOnId = nil
                     }
                 )

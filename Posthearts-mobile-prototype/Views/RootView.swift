@@ -8,6 +8,7 @@ struct RootView: View {
     @State private var activeLetterId: UUID? = nil
     @State private var chromeVisible: Bool = true
     @Namespace private var letterNamespace
+    @Environment(\.scenePhase) private var scenePhase
 
     enum Tab { case home, mailbox }
 
@@ -40,6 +41,13 @@ struct RootView: View {
         }
         .sensoryFeedback(.selection, trigger: tab)
         .sensoryFeedback(.impact(weight: .light), trigger: path.count)
+        .onChange(of: scenePhase) { _, phase in
+            // Force a synchronous save before the app suspends so a Stop
+            // from Xcode (or backgrounding) can't drop pending edits.
+            if phase != .active {
+                store.save()
+            }
+        }
     }
 
     @ViewBuilder

@@ -73,15 +73,24 @@ struct AddOnView: View {
             .offset(x: outerWidth / 2, y: outerHeight / 2)
             .highPriorityGesture(resizeGesture)
 
-        // Top-center trash chip.
-        chip(systemImage: "trash")
-            .highPriorityGesture(
-                TapGesture().onEnded {
-                    Haptics.impact(.medium)
-                    onDelete()
-                }
-            )
-            .offset(y: -outerHeight / 2 - chipSize / 2 - chipGap)
+        // Top-center trash chip — wrapped in a Button so the tap reliably
+        // wins over the surrounding drag/pinch gestures and the LetterPreview
+        // background tap that otherwise deselects the add-on.
+        Button {
+            Haptics.impact(.medium)
+            onDelete()
+        } label: {
+            chip {
+                Image("trash-can")
+                    .renderingMode(.template)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 14, height: 14)
+                    .foregroundStyle(.black.opacity(0.85))
+            }
+        }
+        .buttonStyle(.plain)
+        .offset(y: -outerHeight / 2 - chipSize / 2 - chipGap)
 
         // Bottom-center rotate chip.
         chip(systemImage: "arrow.clockwise")
@@ -100,14 +109,18 @@ struct AddOnView: View {
     }
 
     private func chip(systemImage: String) -> some View {
+        chip {
+            Image(systemName: systemImage)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(.black.opacity(0.85))
+        }
+    }
+
+    private func chip<Icon: View>(@ViewBuilder icon: () -> Icon) -> some View {
         Circle()
             .fill(.white)
             .frame(width: chipSize, height: chipSize)
-            .overlay(
-                Image(systemName: systemImage)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(.black.opacity(0.85))
-            )
+            .overlay { icon() }
             .shadow(color: .black.opacity(0.18), radius: 3, x: 0, y: 1)
             .contentShape(Circle())
     }

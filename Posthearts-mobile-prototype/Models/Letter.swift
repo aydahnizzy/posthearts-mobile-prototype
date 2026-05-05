@@ -1,7 +1,7 @@
 import SwiftUI
 import Foundation
 
-enum ContentAlignment: String, CaseIterable, Identifiable {
+enum ContentAlignment: String, CaseIterable, Identifiable, Codable {
     case top, center, bottom
     var id: String { rawValue }
     var label: String {
@@ -14,18 +14,81 @@ enum ContentAlignment: String, CaseIterable, Identifiable {
 }
 
 @Observable
-final class Letter: Identifiable, Hashable {
-    let id: UUID = UUID()
-    var title: String = ""
-    var content: String = ""
-    var contentAlignment: ContentAlignment = .top
-    var paperId: String = "brown"
-    var fontId: String = "Instrument Serif"
-    var fontSizeStep: Int = 3       // 1...5, neutral = 3
-    var frameColor: FrameColor = FrameColor.all.randomElement()!
-    var addOns: [AddOn] = []
-    let createdAt: Date = Date()
-    var updatedAt: Date = Date()
+final class Letter: Identifiable, Hashable, Codable {
+    let id: UUID
+    var title: String
+    var content: String
+    var contentAlignment: ContentAlignment
+    var paperId: String
+    var fontId: String
+    var fontSizeStep: Int       // 1...5, neutral = 3
+    var frameColor: FrameColor
+    var addOns: [AddOn]
+    let createdAt: Date
+    var updatedAt: Date
+
+    init(
+        id: UUID = UUID(),
+        title: String = "",
+        content: String = "",
+        contentAlignment: ContentAlignment = .top,
+        paperId: String = "brown",
+        fontId: String = "Instrument Serif",
+        fontSizeStep: Int = 3,
+        frameColor: FrameColor = FrameColor.all.randomElement()!,
+        addOns: [AddOn] = [],
+        createdAt: Date = Date(),
+        updatedAt: Date = Date()
+    ) {
+        self.id = id
+        self.title = title
+        self.content = content
+        self.contentAlignment = contentAlignment
+        self.paperId = paperId
+        self.fontId = fontId
+        self.fontSizeStep = fontSizeStep
+        self.frameColor = frameColor
+        self.addOns = addOns
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id, title, content, contentAlignment, paperId, fontId,
+             fontSizeStep, frameColor, addOns, createdAt, updatedAt
+    }
+
+    convenience init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            id: try c.decode(UUID.self, forKey: .id),
+            title: try c.decode(String.self, forKey: .title),
+            content: try c.decode(String.self, forKey: .content),
+            contentAlignment: try c.decode(ContentAlignment.self, forKey: .contentAlignment),
+            paperId: try c.decode(String.self, forKey: .paperId),
+            fontId: try c.decode(String.self, forKey: .fontId),
+            fontSizeStep: try c.decode(Int.self, forKey: .fontSizeStep),
+            frameColor: try c.decode(FrameColor.self, forKey: .frameColor),
+            addOns: try c.decode([AddOn].self, forKey: .addOns),
+            createdAt: try c.decode(Date.self, forKey: .createdAt),
+            updatedAt: try c.decode(Date.self, forKey: .updatedAt)
+        )
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(title, forKey: .title)
+        try c.encode(content, forKey: .content)
+        try c.encode(contentAlignment, forKey: .contentAlignment)
+        try c.encode(paperId, forKey: .paperId)
+        try c.encode(fontId, forKey: .fontId)
+        try c.encode(fontSizeStep, forKey: .fontSizeStep)
+        try c.encode(frameColor, forKey: .frameColor)
+        try c.encode(addOns, forKey: .addOns)
+        try c.encode(createdAt, forKey: .createdAt)
+        try c.encode(updatedAt, forKey: .updatedAt)
+    }
 
     var paper: Paper { Paper.byId[paperId] ?? Paper.all[0] }
     var font: PostFont { PostFont.byId[fontId] ?? PostFont.all[0] }

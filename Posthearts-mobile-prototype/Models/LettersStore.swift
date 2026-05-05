@@ -12,19 +12,31 @@ struct DatedLetterGroup: Identifiable {
 final class LettersStore {
     var letters: [Letter]
 
+    /// Cancellable for the debounced save kicked off by observation tracking.
+    @ObservationIgnored private var saveTask: Task<Void, Never>?
+
     init(seedSamples: Bool = true) {
-        self.letters = seedSamples ? LettersStore.makeSampleLetters() : []
+        if let loaded = LettersStore.loadFromDisk() {
+            self.letters = loaded
+        } else {
+            self.letters = seedSamples ? LettersStore.makeSampleLetters() : []
+        }
+        Task { @MainActor [weak self] in
+            self?.observeChanges()
+        }
     }
 
     @discardableResult
     func create() -> Letter {
         let new = Letter()
         letters.insert(new, at: 0)
+        save()
         return new
     }
 
     func delete(_ id: UUID) {
         letters.removeAll { $0.id == id }
+        save()
     }
 
     @discardableResult
@@ -39,11 +51,78 @@ final class LettersStore {
         copy.frameColor = letter.frameColor
         copy.addOns = letter.addOns
         letters.insert(copy, at: 0)
+        save()
         return copy
     }
 
     func touch(_ letter: Letter) {
         letter.updatedAt = Date()
+        save()
+    }
+
+    // MARK: - Persistence
+
+    /// Encode the current `letters` array to JSON in the app's Documents
+    /// directory. Safe to call from anywhere on the main actor; the encode
+    /// runs synchronously but is small enough (and atomic on disk) that a
+    /// blocking write is fine for a prototype.
+    func save() {
+        do {
+            let data = try JSONEncoder().encode(letters)
+            try data.write(to: Self.storeURL, options: .atomic)
+        } catch {
+            print("LettersStore save failed: \(error)")
+        }
+    }
+
+    /// Watches every observable property on every letter; on any change it
+    /// debounces a save by 500ms (cancelling the prior pending save) so a
+    /// burst of edits — like typing — collapses to a single disk write.
+    /// `withObservationTracking` only fires once per registration, so we
+    /// re-register inside the callback.
+    @MainActor
+    private func observeChanges() {
+        withObservationTracking {
+            _ = letters.count
+            for letter in letters {
+                _ = letter.title
+                _ = letter.content
+                _ = letter.contentAlignment
+                _ = letter.paperId
+                _ = letter.fontId
+                _ = letter.fontSizeStep
+                _ = letter.frameColor
+                _ = letter.addOns
+                _ = letter.updatedAt
+            }
+        } onChange: { [weak self] in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.observeChanges()
+                self.saveTask?.cancel()
+                self.saveTask = Task { @MainActor [weak self] in
+                    try? await Task.sleep(for: .milliseconds(500))
+                    if Task.isCancelled { return }
+                    self?.save()
+                }
+            }
+        }
+    }
+
+    private static func loadFromDisk() -> [Letter]? {
+        guard let data = try? Data(contentsOf: storeURL) else { return nil }
+        do {
+            return try JSONDecoder().decode([Letter].self, from: data)
+        } catch {
+            print("LettersStore load failed (resetting cache): \(error)")
+            try? FileManager.default.removeItem(at: storeURL)
+            return nil
+        }
+    }
+
+    private static var storeURL: URL {
+        let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        return dir.appendingPathComponent("letters.json")
     }
 
     /// Flat list of letters sorted by recency (newest first).

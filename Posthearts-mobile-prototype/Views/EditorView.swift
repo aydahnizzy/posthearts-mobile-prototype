@@ -10,6 +10,8 @@ struct EditorView: View {
     @State private var sheetExpanded: Bool = false
     @State private var composing: Bool = false
     @State private var sheetProgress: CGFloat = 0
+    @State private var isRecordingVoice: Bool = false
+    @State private var streamingTranscript: String?
     @GestureState private var dragOffset: CGFloat = 0
     @FocusState private var inputFocused: Bool
 
@@ -89,10 +91,15 @@ struct EditorView: View {
             if isComposing {
                 Task { @MainActor in
                     try? await Task.sleep(for: .milliseconds(150))
+                    // Re-check at fire time: if a streaming reveal is in
+                    // progress, defer focus until the reveal completes
+                    // (handled in StreamingTranscriptText.onComplete).
+                    guard streamingTranscript == nil else { return }
                     inputFocused = true
                 }
             } else {
                 inputFocused = false
+                streamingTranscript = nil
             }
         }
         .onChange(of: inputFocused) { _, isFocused in
@@ -121,32 +128,33 @@ struct EditorView: View {
     // MARK: - Color popover
 
     private var colorPopover: some View {
-        let visible = Array(FrameColor.all.prefix(7))
-        return HStack(spacing: 10) {
-            ForEach(Array(visible.enumerated()), id: \.element.id) { idx, color in
-                Button {
-                    withAnimation(.easeInOut(duration: 0.3)) {
-                        letter.frameColor = color
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 10) {
+                ForEach(FrameColor.all) { color in
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.3)) {
+                            letter.frameColor = color
+                        }
+                    } label: {
+                        Circle()
+                            .fill(color.color)
+                            .frame(width: 32, height: 32)
+                            .overlay(
+                                Circle()
+                                    .strokeBorder(.white, lineWidth: letter.frameColor == color ? 3 : 0)
+                                    .padding(2)
+                            )
+                            .overlay(
+                                Circle()
+                                    .strokeBorder(.black.opacity(0.5), lineWidth: 1.5)
+                            )
                     }
-                } label: {
-                    Circle()
-                        .fill(color.color)
-                        .frame(width: 32, height: 32)
-                        .overlay(
-                            Circle()
-                                .strokeBorder(.white, lineWidth: letter.frameColor == color ? 3 : 0)
-                                .padding(2)
-                        )
-                        .overlay(
-                            Circle()
-                                .strokeBorder(.black.opacity(0.1), lineWidth: 1)
-                        )
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
             }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
         .background(Theme.Background.onCanvas, in: Capsule())
         .shadow(color: Color(hex: 0x2A2A2A, alpha: 0.15), radius: 12, x: 0, y: 4)
     }
@@ -299,7 +307,7 @@ private var toolBar: some View {
                 }
 
                 toolItem(label: "Align") { sheet = .align } icon: {
-                    Image("aligned-top")
+                    Image("IconAlignmentLeft")
                         .renderingMode(.template)
                         .resizable()
                         .scaledToFit()
@@ -310,13 +318,16 @@ private var toolBar: some View {
                 toolItem(label: "Color") {
                     withAnimation(popoverSpring) { showColorPopover.toggle() }
                 } icon: {
-                    Circle()
-                        .fill(letter.frameColor.color)
-                        .frame(width: 24, height: 24)
-                        .overlay(
-                            Circle()
-                                .strokeBorder(.black.opacity(0.15), lineWidth: 2)
-                        )
+                    ZStack {
+                        Circle()
+                            .fill(letter.frameColor.color)
+                            .frame(width: 28, height: 28)
+                            .overlay(
+                                Circle()
+                                    .strokeBorder(.black.opacity(0.3), lineWidth: 2)
+                            )
+                    }
+                    .frame(width: 24, height: 24)
                 }
 
                 toolItem(label: "Paper") { sheet = .paper } icon: {
@@ -371,7 +382,30 @@ private var toolBar: some View {
         .buttonStyle(.plain)
     }
 
+    @ViewBuilder
     private var inputBar: some View {
+        if isRecordingVoice {
+            VoiceRecorderBar(
+                letter: letter,
+                isActive: $isRecordingVoice,
+                onTranscriptReady: { transcript in
+                    Task { @MainActor in
+                        try? await Task.sleep(for: .milliseconds(350))
+                        streamingTranscript = transcript
+                        withAnimation(sheetTransition) {
+                            composing = true
+                        }
+                    }
+                }
+            )
+                .transition(.opacity)
+        } else {
+            regularInputBar
+                .transition(.opacity)
+        }
+    }
+
+    private var regularInputBar: some View {
         HStack(spacing: 4) {
             ZStack(alignment: .leading) {
                 if letter.content.isEmpty {
@@ -394,7 +428,10 @@ private var toolBar: some View {
 
             if letter.content.isEmpty {
                 Button {
-                    // voice action
+                    withAnimation(.smooth(duration: 0.25)) {
+                        isRecordingVoice = true
+                    }
+                    Haptics.impact(.light)
                 } label: {
                     Image("voice")
                         .renderingMode(.template)
@@ -424,18 +461,39 @@ private var toolBar: some View {
     /// auto-shown via the `composing` change handler on the EditorView body.
     private var composeSheetContent: some View {
         ZStack(alignment: .bottomTrailing) {
-            TextField("", text: $letter.content, axis: .vertical)
+            // TextEditor scrolls internally and keeps the cursor visible
+            // above the keyboard automatically, so it doesn't fight a parent
+            // ScrollView's gestures the way TextField(axis: .vertical) did.
+            TextEditor(text: $letter.content)
                 .focused($inputFocused)
                 .font(.system(size: 16))
                 .lineSpacing(5)
                 .foregroundStyle(Theme.Text.default)
                 .tint(Theme.Text.default)
-                .lineLimit(nil)
-                .padding(.horizontal, 16)
+                .scrollContentBackground(.hidden)
+                .padding(.horizontal, 12)
                 .padding(.top, 12)
+                .padding(.bottom, 24)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .opacity(streamingTranscript == nil ? 1 : 0)
+                .disabled(streamingTranscript != nil)
 
-            if !letter.content.isEmpty {
+            if let streaming = streamingTranscript {
+                StreamingTranscriptText(
+                    text: streaming,
+                    onComplete: {
+                        letter.content = streaming
+                        streamingTranscript = nil
+                        Task { @MainActor in
+                            try? await Task.sleep(for: .milliseconds(50))
+                            inputFocused = true
+                        }
+                    }
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            }
+
+            if !letter.content.isEmpty && streamingTranscript == nil {
                 Button {
                     letter.content = ""
                     Haptics.impact(.medium)
